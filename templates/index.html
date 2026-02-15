@@ -189,8 +189,14 @@
         }
 
         function renderMath() {
+            // Updated to prefer \\[ ... \\] for robustness
             renderMathInElement(document.body, {
-                delimiters: [{left: "$$", right: "$$", display: true}, {left: "$", right: "$", display: false}],
+                delimiters: [
+                    {left: "$$", right: "$$", display: true}, 
+                    {left: "$", right: "$", display: false},
+                    {left: "\\[", right: "\\]", display: true},
+                    {left: "\\(", right: "\\)", display: false}
+                ],
                 throwOnError: false
             });
         }
@@ -229,8 +235,8 @@
             }
 
             let text = lines[window.podcastIndex];
-            // Remove math chars for audio, keep text
-            const speakText = text.replace(/[\$\*\[\]\(\)\#\-\^\_\{\}]/g, "").trim();
+            // Remove LaTeX formatting for the audio read-out
+            const speakText = text.replace(/\\\\\[|\\\\\]|\\\\\(|\\\\\)|\$\$|\$|\^|\{|\}|\\/g, " ").trim();
             
             const utter = new SpeechSynthesisUtterance(speakText);
             utter.rate = 1.0;
@@ -244,14 +250,20 @@
             synth.speak(utter);
 
             const p = document.createElement('p');
-            p.innerText = text; // Keep Visual Math here
+            p.innerText = text; // Keep Math text visible
             p.className = "text-slate-700 mb-4 border-l-4 border-green-500 pl-4 bg-white p-3 rounded-r-xl shadow-sm";
             const box = document.getElementById('podcast-transcript');
             box.prepend(p);
             
-            // Render Math in the new podcast block
+            // Force math render on the new bubble
             renderMathInElement(p, {
-                delimiters: [{left: "$$", right: "$$", display: true}, {left: "$", right: "$", display: false}]
+                delimiters: [
+                    {left: "$$", right: "$$", display: true}, 
+                    {left: "$", right: "$", display: false},
+                    {left: "\\[", right: "\\]", display: true},
+                    {left: "\\(", right: "\\)", display: false}
+                ],
+                throwOnError: false
             });
         }
 
@@ -281,7 +293,8 @@
                 const res = await apiCall('/api/chat', {context: "Podcast Interruption", question: question, full_content: window.globalData.notes});
                 const data = await res.json();
                 
-                const answerText = data.answer.replace(/[\$\*\[\]\(\)\#\-\^\_\{\}]/g, "");
+                // Clean math from spoken answer
+                const answerText = data.answer.replace(/\\\\\[|\\\\\]|\\\\\(|\\\\\)|\$\$|\$|\^|\{|\}|\\/g, " ");
                 const utter = new SpeechSynthesisUtterance(answerText);
                 utter.voice = getNarratorVoice();
                 
@@ -299,7 +312,13 @@
                 document.getElementById('podcast-transcript').prepend(aiP);
                 
                 renderMathInElement(aiP, {
-                    delimiters: [{left: "$$", right: "$$", display: true}, {left: "$", right: "$", display: false}]
+                    delimiters: [
+                        {left: "$$", right: "$$", display: true}, 
+                        {left: "$", right: "$", display: false},
+                        {left: "\\[", right: "\\]", display: true},
+                        {left: "\\(", right: "\\)", display: false}
+                    ],
+                    throwOnError: false
                 });
             };
             
