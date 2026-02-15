@@ -6,3 +6,4 @@ jinja2
 python-multipart
 yt-dlp
 pypdf
+youtube-transcript-api
