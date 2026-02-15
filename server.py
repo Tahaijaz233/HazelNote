@@ -1,6 +1,6 @@
 import os
-import re
 import subprocess
+import re
 from fastapi import FastAPI, Request, UploadFile, File, Header, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -16,6 +16,9 @@ templates = Jinja2Templates(directory="templates")
 
 class VideoRequest(BaseModel):
     url: str
+
+class ManualRequest(BaseModel):
+    text: str
 
 class ChatRequest(BaseModel):
     context: str
@@ -40,99 +43,81 @@ def get_transcript(video_url):
     print(f"📥 Fetching YouTube: {video_url}")
     video_id = get_video_id(video_url)
     
-    # METHOD 1: YouTube Transcript API (Fastest)
-    try:
-        if video_id:
-            print("Attempting Method 1: API...")
+    # 1. Try API (Fastest)
+    if video_id:
+        try:
             transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
             return clean_text(" ".join([item['text'] for item in transcript_list]))
-    except Exception as e:
-        print(f"Method 1 Failed: {e}")
+        except: pass
 
-    # METHOD 2: yt-dlp with Android Client (Bypasses Cloud IP blocks)
+    # 2. Try yt-dlp (iOS Client - often less blocked)
     try:
-        print("Attempting Method 2: yt-dlp Android...")
         if os.path.exists("transcript.en.vtt"): os.remove("transcript.en.vtt")
-        # The magic flag: --extractor-args "youtube:player_client=android"
         cmd = [
-            "yt-dlp", 
-            "--write-auto-sub", 
-            "--skip-download", 
+            "yt-dlp", "--write-auto-sub", "--skip-download", 
             "--sub-lang", "en", 
-            "--extractor-args", "youtube:player_client=android",
+            "--extractor-args", "youtube:player_client=ios", 
             "--output", "transcript", 
             video_url
         ]
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
         if os.path.exists("transcript.en.vtt"):
             with open("transcript.en.vtt", "r", encoding="utf-8") as f: content = f.read()
             os.remove("transcript.en.vtt")
             lines = [l.strip() for l in content.splitlines() if "-->" not in l and l.strip() and not l.startswith(("WEBVTT", "Kind:", "Language:"))]
             return clean_text(" ".join(list(dict.fromkeys(lines))))
-    except Exception as e:
-        print(f"Method 2 Failed: {e}")
-
+    except: pass
+    
     return None
 
 def extract_pdf_text(file_path):
-    print(f"📄 Reading PDF: {file_path}")
     try:
         reader = pypdf.PdfReader(file_path)
         text = ""
         for page in reader.pages:
             text += page.extract_text() + "\n"
         return clean_text(text)
-    except Exception as e:
-        return None
+    except: return None
 
 def try_generate(client, prompt):
     model = "gemini-2.5-flash" 
     try:
-        print(f"🧠 Gemini 2.5 Flash is thinking...")
         response = client.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=types.GenerateContentConfig(max_output_tokens=8192)
+            model=model, contents=prompt, config=types.GenerateContentConfig(max_output_tokens=8192)
         )
         return response.text
-    except Exception as e:
-        return f"Error: {str(e)}"
+    except Exception as e: return f"Error: {str(e)}"
 
 # --- BRAIN LOGIC ---
 def generate_study_data(client, text):
     print("...Generating Content...")
     
-    # NOTE: We now explicitly ask for \\( ... \\) for inline math to survive Markdown parsing
+    # NOTES PROMPT
     notes_prompt = """
     You are an expert academic tutor.
-    1. Write a SUMMARY (250 words). 
-       - Use `\\[ x^2 \\]` for block equations.
-       - Use `\\( x \\)` for inline math.
+    1. Write a SUMMARY (250 words). Use `$$x^2$$` for all math equations.
     2. Write "===SPLIT==="
     3. Write DETAILED NOTES (Markdown).
-       - Use ## for Topics and ### for Sub-topics.
+       - Use ## for Topics.
        - **Bold** key terms.
-       - Math: Use `\\[ ... \\]` for block, `\\( ... \\)` for inline.
-       - **DIAGRAMS:** Use Mermaid.js. 
-       - **CRITICAL:** Use simple node names (A, B, C) and put text in quotes.
+       - Math: ALWAYS use `$$` for block math and `$` for inline. Example: $$E=mc^2$$.
+       - **DIAGRAMS:** Use Mermaid.js. Quote strings!
          ```mermaid
-         graph TD;
-            A["Concept Start"] --> B["Process Step"];
-            B --> C["Result"];
+         graph TD; A["Start"] --> B["End"];
          ```
     """
     raw_notes = try_generate(client, f"{notes_prompt}\n\nCONTENT:\n{text[:60000]}")
     if "Error:" in raw_notes: return {"error": raw_notes}
+    
     parts = raw_notes.split("===SPLIT===")
     summary = parts[0].strip()
     notes_text = parts[1].strip() if len(parts) > 1 else raw_notes
 
-    # 2. EXTRAS
+    # EXTRAS PROMPT
     extras_prompt = """
     Create study aids.
     ===FLASHCARDS===
-    Front: [Term] | Back: [Def (Use \\( x \\) for math)]
+    Front: [Term] | Back: [Def]
     ===QUIZ===
     Q: [Question] | A: [Opt1] | B: [Opt2] | C: [Opt3] | Answer: [Full Answer Text]
     """
@@ -143,8 +128,8 @@ def generate_study_data(client, text):
         try:
             for line in raw_extras.split("===FLASHCARDS===")[1].split("===QUIZ===")[0].splitlines():
                 if "|" in line:
-                    parts = line.split("|")
-                    if len(parts) >= 2: flashcards.append({"front": parts[0].replace("Front:", "").strip(), "back": parts[1].replace("Back:", "").strip()})
+                    p = line.split("|")
+                    if len(p) >= 2: flashcards.append({"front": p[0].replace("Front:", "").strip(), "back": p[1].replace("Back:", "").strip()})
         except: pass
 
     quiz = []
@@ -152,31 +137,22 @@ def generate_study_data(client, text):
         try:
             for line in raw_extras.split("===QUIZ===")[1].splitlines():
                 if "|" in line and "Q:" in line:
-                    parts = line.split("|")
-                    if len(parts) >= 5:
-                        quiz.append({
-                            "question": parts[0].replace("Q:", "").strip(), 
-                            "options": [p.strip() for p in parts[1:-1]], 
-                            "answer": parts[-1].replace("Answer:", "").strip()
-                        })
+                    p = line.split("|")
+                    if len(p) >= 5:
+                        quiz.append({"question": p[0].replace("Q:", "").strip(), "options": [x.strip() for x in p[1:-1]], "answer": p[-1].replace("Answer:", "").strip()})
         except: pass
 
-    # 3. PODCAST SCRIPT
+    # PODCAST PROMPT
     podcast_prompt = """
-    Convert this content into a teaching monologue. 
-    - You are the Narrator speaking directly to a student.
-    - Explain math concepts conceptually in spoken English. 
-    - For visual math equations, output them as `\\[ x^2 \\]` so they render on screen, but write the surrounding text to be spoken naturally.
-    - Break the explanation into short, digestible paragraphs (3-4 sentences max).
-    - End the script with "Any questions?".
+    Convert this content into a teaching monologue.
+    - Role: Narrator speaking to a student.
+    - Tone: Engaging, clear, storytelling.
+    - Math: Explain concepts in words, but keep `$$formula$$` in the text for display.
+    - End with "Any questions?".
     """
     podcast_script = try_generate(client, f"{podcast_prompt}\n\nCONTENT:\n{summary}")
 
-    return {
-        "summary": summary, "notes": notes_text, 
-        "flashcards": flashcards, "quiz": quiz, 
-        "podcast": podcast_script, "raw_transcript": text[:20000]
-    }
+    return {"summary": summary, "notes": notes_text, "flashcards": flashcards, "quiz": quiz, "podcast": podcast_script, "raw_transcript": text[:20000]}
 
 # --- ROUTES ---
 @app.get("/", response_class=HTMLResponse)
@@ -187,8 +163,15 @@ async def read_root(request: Request):
 async def analyze_video(req: VideoRequest, x_gemini_api_key: str = Header(None)):
     client = get_client(x_gemini_api_key)
     transcript = get_transcript(req.url)
-    if not transcript: return JSONResponse(content={"error": "No transcript found. YouTube might be blocking cloud IPs. Try a different video or use PDF upload."}, status_code=400)
+    if not transcript: 
+        # Return 422 to trigger the "Manual Input" modal on frontend
+        return JSONResponse(content={"error": "YouTube blocked the request. Use the 'Paste Text' option."}, status_code=422)
     return generate_study_data(client, transcript)
+
+@app.post("/api/analyze_text")
+async def analyze_text(req: ManualRequest, x_gemini_api_key: str = Header(None)):
+    client = get_client(x_gemini_api_key)
+    return generate_study_data(client, req.text)
 
 @app.post("/api/analyze_pdf")
 async def analyze_pdf(x_gemini_api_key: str = Header(None), file: UploadFile = File(...)):
