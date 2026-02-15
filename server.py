@@ -1,5 +1,6 @@
 import os
 import re
+import subprocess
 from fastapi import FastAPI, Request, UploadFile, File, Header, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -31,28 +32,48 @@ def clean_text(text):
     return re.sub(r'\s+', ' ', text).strip()
 
 def get_video_id(url):
-    """Extracts the video ID from various YouTube URL formats."""
     regex = r"(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})"
     match = re.search(regex, url)
     return match.group(1) if match else None
 
 def get_transcript(video_url):
     print(f"📥 Fetching YouTube: {video_url}")
+    video_id = get_video_id(video_url)
+    
+    # METHOD 1: YouTube Transcript API (Fastest)
     try:
-        video_id = get_video_id(video_url)
-        if not video_id:
-            print("Error: Could not extract video ID")
-            return None
-            
-        # Fetch transcript using the API library (Works better on Cloud IPs)
-        transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-        
-        # Combine text parts
-        full_text = " ".join([item['text'] for item in transcript_list])
-        return clean_text(full_text)
+        if video_id:
+            print("Attempting Method 1: API...")
+            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+            return clean_text(" ".join([item['text'] for item in transcript_list]))
     except Exception as e:
-        print(f"YouTube Error: {e}")
-        return None
+        print(f"Method 1 Failed: {e}")
+
+    # METHOD 2: yt-dlp with Android Client (Bypasses Cloud IP blocks)
+    try:
+        print("Attempting Method 2: yt-dlp Android...")
+        if os.path.exists("transcript.en.vtt"): os.remove("transcript.en.vtt")
+        # The magic flag: --extractor-args "youtube:player_client=android"
+        cmd = [
+            "yt-dlp", 
+            "--write-auto-sub", 
+            "--skip-download", 
+            "--sub-lang", "en", 
+            "--extractor-args", "youtube:player_client=android",
+            "--output", "transcript", 
+            video_url
+        ]
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        if os.path.exists("transcript.en.vtt"):
+            with open("transcript.en.vtt", "r", encoding="utf-8") as f: content = f.read()
+            os.remove("transcript.en.vtt")
+            lines = [l.strip() for l in content.splitlines() if "-->" not in l and l.strip() and not l.startswith(("WEBVTT", "Kind:", "Language:"))]
+            return clean_text(" ".join(list(dict.fromkeys(lines))))
+    except Exception as e:
+        print(f"Method 2 Failed: {e}")
+
+    return None
 
 def extract_pdf_text(file_path):
     print(f"📄 Reading PDF: {file_path}")
@@ -82,16 +103,17 @@ def try_generate(client, prompt):
 def generate_study_data(client, text):
     print("...Generating Content...")
     
-    # 1. NOTES
+    # NOTE: We now explicitly ask for \\( ... \\) for inline math to survive Markdown parsing
     notes_prompt = """
     You are an expert academic tutor.
     1. Write a SUMMARY (250 words). 
-       - CRITICAL: Use `$$...$$` for block math and `$...$` for inline math.
+       - Use `\\[ x^2 \\]` for block equations.
+       - Use `\\( x \\)` for inline math.
     2. Write "===SPLIT==="
     3. Write DETAILED NOTES (Markdown).
        - Use ## for Topics and ### for Sub-topics.
        - **Bold** key terms.
-       - Math: Use `$$...$$` for equations.
+       - Math: Use `\\[ ... \\]` for block, `\\( ... \\)` for inline.
        - **DIAGRAMS:** Use Mermaid.js. 
        - **CRITICAL:** Use simple node names (A, B, C) and put text in quotes.
          ```mermaid
@@ -110,7 +132,7 @@ def generate_study_data(client, text):
     extras_prompt = """
     Create study aids.
     ===FLASHCARDS===
-    Front: [Term] | Back: [Def]
+    Front: [Term] | Back: [Def (Use \\( x \\) for math)]
     ===QUIZ===
     Q: [Question] | A: [Opt1] | B: [Opt2] | C: [Opt3] | Answer: [Full Answer Text]
     """
@@ -143,7 +165,8 @@ def generate_study_data(client, text):
     podcast_prompt = """
     Convert this content into a teaching monologue. 
     - You are the Narrator speaking directly to a student.
-    - Explain math concepts conceptually in spoken English, but use LaTeX `$$x$$` for the transcript.
+    - Explain math concepts conceptually in spoken English. 
+    - For visual math equations, output them as `\\[ x^2 \\]` so they render on screen, but write the surrounding text to be spoken naturally.
     - Break the explanation into short, digestible paragraphs (3-4 sentences max).
     - End the script with "Any questions?".
     """
