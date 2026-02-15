@@ -1,5 +1,4 @@
 import os
-import subprocess
 import re
 from fastapi import FastAPI, Request, UploadFile, File, Header, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -8,6 +7,7 @@ from pydantic import BaseModel
 from google import genai
 from google.genai import types
 import pypdf
+from youtube_transcript_api import YouTubeTranscriptApi
 
 app = FastAPI()
 os.makedirs("templates", exist_ok=True)
@@ -30,19 +30,26 @@ def get_client(api_key: str):
 def clean_text(text):
     return re.sub(r'\s+', ' ', text).strip()
 
+def get_video_id(url):
+    """Extracts the video ID from various YouTube URL formats."""
+    regex = r"(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})"
+    match = re.search(regex, url)
+    return match.group(1) if match else None
+
 def get_transcript(video_url):
     print(f"📥 Fetching YouTube: {video_url}")
     try:
-        if os.path.exists("transcript.en.vtt"): os.remove("transcript.en.vtt")
-        cmd = ["yt-dlp", "--write-auto-sub", "--skip-download", "--sub-lang", "en", "--output", "transcript", video_url]
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        video_id = get_video_id(video_url)
+        if not video_id:
+            print("Error: Could not extract video ID")
+            return None
+            
+        # Fetch transcript using the API library (Works better on Cloud IPs)
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
         
-        if os.path.exists("transcript.en.vtt"):
-            with open("transcript.en.vtt", "r", encoding="utf-8") as f: content = f.read()
-            os.remove("transcript.en.vtt")
-            lines = [l.strip() for l in content.splitlines() if "-->" not in l and l.strip() and not l.startswith(("WEBVTT", "Kind:", "Language:"))]
-            return clean_text(" ".join(list(dict.fromkeys(lines))))
-        return None
+        # Combine text parts
+        full_text = " ".join([item['text'] for item in transcript_list])
+        return clean_text(full_text)
     except Exception as e:
         print(f"YouTube Error: {e}")
         return None
@@ -157,7 +164,7 @@ async def read_root(request: Request):
 async def analyze_video(req: VideoRequest, x_gemini_api_key: str = Header(None)):
     client = get_client(x_gemini_api_key)
     transcript = get_transcript(req.url)
-    if not transcript: return JSONResponse(content={"error": "No transcript found."}, status_code=400)
+    if not transcript: return JSONResponse(content={"error": "No transcript found. YouTube might be blocking cloud IPs. Try a different video or use PDF upload."}, status_code=400)
     return generate_study_data(client, transcript)
 
 @app.post("/api/analyze_pdf")
@@ -177,4 +184,4 @@ async def chat_with_context(req: ChatRequest, x_gemini_api_key: str = Header(Non
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=7860)
