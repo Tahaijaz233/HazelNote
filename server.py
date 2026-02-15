@@ -41,42 +41,43 @@ def get_video_id(url):
     match = re.search(regex, url)
     return match.group(1) if match else None
 
-# --- TRANSCRIPT ENGINE ---
+# --- TRANSCRIPT ENGINE (THE MISSING PART) ---
 def fetch_invidious_transcript(video_id):
     """Fallback: Tries to fetch captions from public Invidious instances."""
     instances = [
         "https://inv.tux.pizza",
+        "https://invidious.drgns.space",
+        "https://invidious.fdn.fr",
         "https://vid.puffyan.us",
-        "https://invidious.jing.rocks",
-        "https://invidious.nerdvpn.de"
+        "https://invidious.nerdvpn.de",
+        "https://invidious.lunar.icu",
+        "https://yewtu.be",
+        "https://invidious.sipam.net"
     ]
     
     for instance in instances:
         try:
             print(f"🔄 Trying Invidious Proxy: {instance}...")
-            # 1. Get Video Metadata to find caption tracks
-            meta_res = requests.get(f"{instance}/api/v1/videos/{video_id}", timeout=5)
+            # 1. Get Video Metadata
+            meta_res = requests.get(f"{instance}/api/v1/videos/{video_id}", timeout=4)
             if meta_res.status_code != 200: continue
             
             data = meta_res.json()
             captions = data.get('captions', [])
             
-            # Find English or Auto-generated English
+            # Find English track
             track = next((c for c in captions if c['language'] == 'en'), None)
             if not track: continue
             
-            # 2. Fetch the actual caption text
-            cap_res = requests.get(f"{instance}{track['url']}", timeout=5)
+            # 2. Fetch Caption Text
+            cap_res = requests.get(f"{instance}{track['url']}", timeout=4)
             if cap_res.status_code != 200: continue
             
-            # Parse VTT (Simple Line Extraction)
-            vtt_text = cap_res.text
-            lines = [line.strip() for line in vtt_text.splitlines() if "-->" not in line and line.strip() and not line.startswith("WEBVTT") and not line.startswith("Kind:")]
-            return " ".join(list(dict.fromkeys(lines))) # Remove duplicates and join
+            # Parse VTT
+            lines = [line.strip() for line in cap_res.text.splitlines() if "-->" not in line and line.strip() and not line.startswith("WEBVTT") and not line.startswith("Kind:")]
+            return " ".join(list(dict.fromkeys(lines)))
             
-        except Exception as e:
-            print(f"Instance {instance} failed: {e}")
-            continue
+        except: continue
     return None
 
 def get_transcript(video_url):
@@ -84,19 +85,19 @@ def get_transcript(video_url):
     video_id = get_video_id(video_url)
     if not video_id: return None
     
-    # 1. Try Official API (Fastest, but often blocked)
+    # 1. Try Invidious Proxy (Best for Cloud IPs)
+    print("Method 1: Invidious Proxy Network")
+    proxy_text = fetch_invidious_transcript(video_id)
+    if proxy_text: return clean_text(proxy_text)
+
+    # 2. Try Official API (Backup)
     try:
-        print("Method 1: Official API")
+        print("Method 2: Official API")
         transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
         return clean_text(" ".join([item['text'] for item in transcript_list]))
     except: pass
 
-    # 2. Try Invidious Proxy (The "Online Generator" trick)
-    print("Method 2: Invidious Proxy Network")
-    proxy_text = fetch_invidious_transcript(video_id)
-    if proxy_text: return clean_text(proxy_text)
-
-    # 3. Try yt-dlp (Last Resort)
+    # 3. Try yt-dlp iOS (Last Resort)
     try:
         print("Method 3: yt-dlp (iOS)")
         if os.path.exists("transcript.en.vtt"): os.remove("transcript.en.vtt")
@@ -133,7 +134,6 @@ def try_generate(client, prompt):
 def generate_study_data(client, text):
     print("...Generating Content...")
     
-    # NOTES PROMPT
     notes_prompt = """
     You are an expert academic tutor.
     1. Write a SUMMARY (250 words). 
@@ -155,7 +155,6 @@ def generate_study_data(client, text):
     summary = parts[0].strip()
     notes_text = parts[1].strip() if len(parts) > 1 else raw_notes
 
-    # EXTRAS PROMPT
     extras_prompt = """
     Create study aids.
     ===FLASHCARDS===
@@ -184,12 +183,11 @@ def generate_study_data(client, text):
                         quiz.append({"question": p[0].replace("Q:", "").strip(), "options": [x.strip() for x in p[1:-1]], "answer": p[-1].replace("Answer:", "").strip()})
         except: pass
 
-    # PODCAST PROMPT (FIXED FOR AUDIO READABILITY)
     podcast_prompt = """
     Convert this content into a teaching monologue script.
     - Role: Narrator speaking directly to a student.
     - Style: Conversational, engaging podcast host.
-    - CRITICAL INSTRUCTION FOR MATH: Do NOT use LaTeX or symbols like $$, ^, or /. 
+    - CRITICAL FOR MATH: Do NOT use symbols like $$, ^, /, or *. 
     - WRITE MATH AS SPOKEN ENGLISH. 
       - Bad: "x^2 + y^2 = z^2"
       - Good: "x squared plus y squared equals z squared"
@@ -231,7 +229,6 @@ async def analyze_pdf(x_gemini_api_key: str = Header(None), file: UploadFile = F
 @app.post("/api/chat")
 async def chat_with_context(req: ChatRequest, x_gemini_api_key: str = Header(None)):
     client = get_client(x_gemini_api_key)
-    # Chat prompt also updated to be conversational
     return {"answer": try_generate(client, f"Tutor Mode. Spoken style. Context: {req.full_content[:5000]}. Question: {req.question}")}
 
 if __name__ == "__main__":
