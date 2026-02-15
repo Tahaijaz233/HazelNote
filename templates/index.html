@@ -13,7 +13,6 @@
     
     <style>
         .prose strong { color: #16a34a; font-weight: 800; }
-        .prose ul { list-style-type: disc; padding-left: 1.8em; margin-bottom: 1em; }
         .mermaid { background: #f0fdf4; padding: 20px; border-radius: 12px; margin: 30px 0; display: flex; justify-content: center; border: 1px solid #dcfce7; }
         .flip-card { background-color: transparent; width: 340px; height: 260px; perspective: 1000px; cursor: pointer; }
         .flip-card-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.6s; transform-style: preserve-3d; }
@@ -26,7 +25,6 @@
         .bar { width: 6px; height: 20px; background: #16a34a; margin: 0 2px; animation: sound 0s -0.4s linear infinite alternate; }
         @keyframes sound { 0% { height: 6px; opacity: .35; } 100% { height: 28px; opacity: 1; } }
         .animate-sound .bar { animation-duration: 400ms; }
-
         @media print {
             nav, #input-section, #sidebar-nav, #chat-modal, #ai-tooltip, .no-print, #btn-export, #settings-btn { display: none !important; }
             #content-section { display: block !important; margin: 0; padding: 0; }
@@ -54,13 +52,24 @@
     <div id="settings-modal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center backdrop-blur-sm no-print">
         <div class="bg-white rounded-3xl w-[500px] p-8 shadow-2xl">
             <h2 class="text-2xl font-bold mb-4">⚙️ Setup API Key</h2>
-            <p class="text-slate-500 mb-6">Enter your Gemini API Key to use HazelNote. It is saved locally in your browser and never shared.</p>
+            <p class="text-slate-500 mb-6">Enter your Gemini API Key to use HazelNote.</p>
             <input type="password" id="api-key-input" placeholder="Paste 'AIza...' key here" class="w-full border border-slate-300 rounded-xl px-4 py-3 mb-6 focus:outline-none focus:border-green-500">
             <div class="flex justify-end gap-3">
                 <button onclick="document.getElementById('settings-modal').classList.add('hidden')" class="text-slate-500 hover:text-slate-800 font-bold">Cancel</button>
                 <button onclick="saveKey()" class="bg-green-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-green-700">Save Key</button>
             </div>
-            <p class="text-xs text-slate-400 mt-4 text-center">Don't have one? <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-blue-500 underline">Get a free key here</a>.</p>
+        </div>
+    </div>
+
+    <div id="paste-modal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center backdrop-blur-sm no-print">
+        <div class="bg-white rounded-3xl w-[600px] p-8 shadow-2xl">
+            <h2 class="text-2xl font-bold mb-2">📄 Paste Content</h2>
+            <p class="text-slate-500 mb-4">YouTube blocked the automatic download. Please paste the transcript or text below:</p>
+            <textarea id="manual-text-input" class="w-full h-64 border border-slate-300 rounded-xl p-4 mb-6 focus:outline-none focus:border-green-500 font-mono text-sm" placeholder="Paste text here..."></textarea>
+            <div class="flex justify-end gap-3">
+                <button onclick="document.getElementById('paste-modal').classList.add('hidden')" class="text-slate-500 hover:text-slate-800 font-bold">Cancel</button>
+                <button onclick="analyzeText()" class="bg-green-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-green-700">Analyze</button>
+            </div>
         </div>
     </div>
 
@@ -70,6 +79,7 @@
         <div class="flex justify-center gap-4 mb-8">
             <button onclick="setMode('video')" id="btn-mode-video" class="px-8 py-3 rounded-full font-bold bg-green-600 text-white shadow-lg shadow-green-200 transition-all">YouTube Video</button>
             <button onclick="setMode('pdf')" id="btn-mode-pdf" class="px-8 py-3 rounded-full font-bold bg-white text-slate-500 hover:bg-slate-100 transition-all">Upload PDF</button>
+            <button onclick="document.getElementById('paste-modal').classList.remove('hidden')" class="px-8 py-3 rounded-full font-bold bg-white text-slate-500 hover:bg-slate-100 transition-all">Paste Text</button>
         </div>
 
         <div id="video-input-box" class="flex gap-3 shadow-2xl shadow-green-100 p-3 bg-white rounded-full border border-slate-100 transition-all">
@@ -100,7 +110,6 @@
                 <button onclick="switchTab('quiz')" id="btn-quiz" class="w-full text-left px-6 py-4 rounded-2xl bg-transparent text-slate-600 hover:bg-slate-50 font-bold transition-all flex items-center gap-3">❓ Quiz</button>
                 <button onclick="switchTab('podcast')" id="btn-podcast" class="w-full text-left px-6 py-4 rounded-2xl bg-transparent text-slate-600 hover:bg-slate-50 font-bold transition-all flex items-center gap-3">🎧 Interactive</button>
             </div>
-            
             <div class="bg-slate-800 rounded-3xl p-6 text-white shadow-xl shadow-slate-300 mt-6 relative overflow-hidden group cursor-pointer" onclick="document.getElementById('ai-tooltip').click()">
                 <h3 class="font-bold text-lg mb-1">AI Tutor</h3>
                 <p class="text-slate-400 text-sm">Highlight text to ask!</p>
@@ -176,26 +185,28 @@
         async function apiCall(endpoint, body) {
             const key = getKey();
             if(!key) { openSettings(); throw new Error("No API Key"); }
-            
             const headers = {'x-gemini-api-key': key};
             if(!(body instanceof FormData)) headers['Content-Type'] = 'application/json';
-            
             const res = await fetch(endpoint, {
-                method: 'POST', 
-                headers: headers,
+                method: 'POST', headers: headers,
                 body: body instanceof FormData ? body : JSON.stringify(body)
             });
+            if(res.status === 422) { // IP Blocked -> Manual Fallback
+                document.getElementById('loader').classList.add('hidden');
+                document.getElementById('input-section').classList.remove('hidden');
+                document.getElementById('paste-modal').classList.remove('hidden');
+                throw new Error("YouTube blocked. Use Manual Input.");
+            }
             return res;
         }
 
         function renderMath() {
-            // Updated to prefer \\[ ... \\] for robustness
             renderMathInElement(document.body, {
                 delimiters: [
                     {left: "$$", right: "$$", display: true}, 
                     {left: "$", right: "$", display: false},
-                    {left: "\\[", right: "\\]", display: true},
-                    {left: "\\(", right: "\\)", display: false}
+                    {left: "\\(", right: "\\)", display: false},
+                    {left: "\\[", right: "\\]", display: true}
                 ],
                 throwOnError: false
             });
@@ -235,41 +246,25 @@
             }
 
             let text = lines[window.podcastIndex];
-            // Remove LaTeX formatting for the audio read-out
-            const speakText = text.replace(/\\\\\[|\\\\\]|\\\\\(|\\\\\)|\$\$|\$|\^|\{|\}|\\/g, " ").trim();
+            const speakText = text.replace(/[\$\*\[\]\(\)\#\-\^\_\{\}\\]/g, " ").trim();
             
             const utter = new SpeechSynthesisUtterance(speakText);
             utter.rate = 1.0;
             utter.voice = getNarratorVoice();
-
-            utter.onend = () => {
-                window.podcastIndex++;
-                speakNextChunk();
-            };
-
+            utter.onend = () => { window.podcastIndex++; speakNextChunk(); };
             synth.speak(utter);
 
             const p = document.createElement('p');
-            p.innerText = text; // Keep Math text visible
+            p.innerText = text;
             p.className = "text-slate-700 mb-4 border-l-4 border-green-500 pl-4 bg-white p-3 rounded-r-xl shadow-sm";
             const box = document.getElementById('podcast-transcript');
             box.prepend(p);
             
-            // Force math render on the new bubble
-            renderMathInElement(p, {
-                delimiters: [
-                    {left: "$$", right: "$$", display: true}, 
-                    {left: "$", right: "$", display: false},
-                    {left: "\\[", right: "\\]", display: true},
-                    {left: "\\(", right: "\\)", display: false}
-                ],
-                throwOnError: false
-            });
+            renderMathInElement(p, { delimiters: [{left: "$$", right: "$$", display: true}, {left: "$", right: "$", display: false}] });
         }
 
         function startListening() {
             if(!SpeechRecognition) return alert("Browser does not support Voice Input. Use Chrome.");
-            
             synth.cancel();
             window.isPlaying = false;
             document.getElementById('podcast-btn').innerHTML = "<span>▶️</span> Resume";
@@ -293,11 +288,9 @@
                 const res = await apiCall('/api/chat', {context: "Podcast Interruption", question: question, full_content: window.globalData.notes});
                 const data = await res.json();
                 
-                // Clean math from spoken answer
-                const answerText = data.answer.replace(/\\\\\[|\\\\\]|\\\\\(|\\\\\)|\$\$|\$|\^|\{|\}|\\/g, " ");
+                const answerText = data.answer.replace(/[\$\*\[\]\(\)\#\-\^\_\{\}\\]/g, " ");
                 const utter = new SpeechSynthesisUtterance(answerText);
                 utter.voice = getNarratorVoice();
-                
                 utter.onend = () => {
                     window.isPlaying = true;
                     document.getElementById('podcast-btn').innerHTML = "<span>⏸️</span> Pause";
@@ -310,22 +303,12 @@
                 aiP.innerText = "Tutor: " + data.answer;
                 aiP.className = "text-slate-700 mb-4 border-l-4 border-blue-500 pl-4 bg-blue-50 p-3 rounded-r-xl";
                 document.getElementById('podcast-transcript').prepend(aiP);
-                
-                renderMathInElement(aiP, {
-                    delimiters: [
-                        {left: "$$", right: "$$", display: true}, 
-                        {left: "$", right: "$", display: false},
-                        {left: "\\[", right: "\\]", display: true},
-                        {left: "\\(", right: "\\)", display: false}
-                    ],
-                    throwOnError: false
-                });
+                renderMathInElement(aiP, { delimiters: [{left: "$$", right: "$$", display: true}, {left: "$", right: "$", display: false}] });
             };
-            
             recognition.start();
         }
 
-        // --- COMMON LOGIC ---
+        // --- APP LOGIC ---
         function handleDragOver(e) { e.preventDefault(); document.getElementById('pdf-input-box').classList.add('drag-over'); }
         function handleDragLeave(e) { e.preventDefault(); document.getElementById('pdf-input-box').classList.remove('drag-over'); }
         function handleDrop(e) {
@@ -359,6 +342,18 @@
             startLoading("Analyzing YouTube Video...");
             try {
                 const res = await apiCall('/api/analyze_video', {url});
+                const data = await res.json();
+                processData(data);
+            } catch (e) { console.log(e); }
+        }
+
+        async function analyzeText() {
+            const text = document.getElementById('manual-text-input').value;
+            if(!text) return;
+            document.getElementById('paste-modal').classList.add('hidden');
+            startLoading("Analyzing Text...");
+            try {
+                const res = await apiCall('/api/analyze_text', {text});
                 const data = await res.json();
                 processData(data);
             } catch (e) { alert(e.message); stopLoading(); }
