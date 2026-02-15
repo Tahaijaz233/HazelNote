@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-google-genai
-pydantic
-jinja2
-python-multipart
-yt-dlp
-pypdf
