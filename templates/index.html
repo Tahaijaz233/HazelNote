@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>HazelNote</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked-katex-extension@1.0.1/lib/index.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+    
+    <style>
+        .prose strong { color: #16a34a; font-weight: 800; }
+        .prose ul { list-style-type: disc; padding-left: 1.8em; margin-bottom: 1em; }
+        .mermaid { background: #f0fdf4; padding: 20px; border-radius: 12px; margin: 30px 0; display: flex; justify-content: center; border: 1px solid #dcfce7; }
+        .flip-card { background-color: transparent; width: 340px; height: 260px; perspective: 1000px; cursor: pointer; }
+        .flip-card-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.6s; transform-style: preserve-3d; }
+        .flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
+        .flip-card-front, .flip-card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px; border-radius: 24px; box-shadow: 0 10px 20px -5px rgba(0,0,0,0.1); }
+        .flip-card-front { background: white; border: 2px solid #f0fdf4; color: #1e293b; }
+        .flip-card-back { background: #16a34a; color: white; transform: rotateY(180deg); }
+        .drag-over { border-color: #16a34a !important; background-color: #f0fdf4 !important; transform: scale(1.02); }
+        #ai-tooltip { position: absolute; display: none; background: #1e293b; color: white; padding: 10px 20px; border-radius: 30px; cursor: pointer; z-index: 50; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .bar { width: 6px; height: 20px; background: #16a34a; margin: 0 2px; animation: sound 0s -0.4s linear infinite alternate; }
+        @keyframes sound { 0% { height: 6px; opacity: .35; } 100% { height: 28px; opacity: 1; } }
+        .animate-sound .bar { animation-duration: 400ms; }
+
+        @media print {
+            nav, #input-section, #sidebar-nav, #chat-modal, #ai-tooltip, .no-print, #btn-export, #settings-btn { display: none !important; }
+            #content-section { display: block !important; margin: 0; padding: 0; }
+            #tab-flashcards, #tab-quiz, #tab-podcast { display: none !important; }
+            #tab-notes { display: block !important; border: none; shadow: none; padding: 0; }
+            body { background: white; font-size: 12pt; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 font-sans text-slate-900">
+
+    <nav class="bg-white border-b border-slate-200 px-8 py-5 flex justify-between items-center sticky top-0 z-40 shadow-sm no-print">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-green-600 rounded-xl text-white flex items-center justify-center font-black text-xl shadow-lg shadow-green-200">H</div>
+            <h1 class="font-extrabold text-2xl tracking-tight text-slate-800">HazelNote</h1>
+        </div>
+        <div class="flex gap-4 items-center">
+            <button onclick="window.print()" id="btn-export" class="hidden bg-slate-800 text-white px-5 py-2 rounded-full text-sm font-bold hover:bg-slate-900 transition shadow-lg">Download PDF</button>
+            <button onclick="openSettings()" id="settings-btn" class="text-slate-400 hover:text-slate-700 transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            </button>
+        </div>
+    </nav>
+
+    <div id="settings-modal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center backdrop-blur-sm no-print">
+        <div class="bg-white rounded-3xl w-[500px] p-8 shadow-2xl">
+            <h2 class="text-2xl font-bold mb-4">⚙️ Setup API Key</h2>
+            <p class="text-slate-500 mb-6">Enter your Gemini API Key to use HazelNote. It is saved locally in your browser and never shared.</p>
+            <input type="password" id="api-key-input" placeholder="Paste 'AIza...' key here" class="w-full border border-slate-300 rounded-xl px-4 py-3 mb-6 focus:outline-none focus:border-green-500">
+            <div class="flex justify-end gap-3">
+                <button onclick="document.getElementById('settings-modal').classList.add('hidden')" class="text-slate-500 hover:text-slate-800 font-bold">Cancel</button>
+                <button onclick="saveKey()" class="bg-green-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-green-700">Save Key</button>
+            </div>
+            <p class="text-xs text-slate-400 mt-4 text-center">Don't have one? <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-blue-500 underline">Get a free key here</a>.</p>
+        </div>
+    </div>
+
+    <div id="input-section" class="max-w-4xl mx-auto mt-20 px-6 text-center transition-all duration-300">
+        <h2 class="text-6xl font-black mb-6 text-slate-900 leading-tight tracking-tight">Master your lectures.</h2>
+        
+        <div class="flex justify-center gap-4 mb-8">
+            <button onclick="setMode('video')" id="btn-mode-video" class="px-8 py-3 rounded-full font-bold bg-green-600 text-white shadow-lg shadow-green-200 transition-all">YouTube Video</button>
+            <button onclick="setMode('pdf')" id="btn-mode-pdf" class="px-8 py-3 rounded-full font-bold bg-white text-slate-500 hover:bg-slate-100 transition-all">Upload PDF</button>
+        </div>
+
+        <div id="video-input-box" class="flex gap-3 shadow-2xl shadow-green-100 p-3 bg-white rounded-full border border-slate-100 transition-all">
+            <input type="text" id="url-input" placeholder="Paste YouTube URL here..." class="flex-1 px-8 py-4 text-lg rounded-l-full outline-none text-slate-700">
+            <button onclick="analyzeVideo()" class="bg-green-600 text-white px-12 py-4 rounded-full hover:bg-green-700 font-bold text-lg transition-all shadow-lg shadow-green-200">Generate</button>
+        </div>
+
+        <div id="pdf-input-box" class="hidden relative flex gap-3 shadow-2xl shadow-green-100 p-8 bg-white rounded-[30px] border-2 border-dashed border-slate-300 transition-all items-center justify-center flex-col"
+             ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+            <p class="text-slate-400 font-bold mb-2 pointer-events-none">Drag & Drop PDF here</p>
+            <label class="bg-green-600 text-white px-12 py-4 rounded-full hover:bg-green-700 font-bold text-lg transition-all shadow-lg shadow-green-200 cursor-pointer">
+                Browse Files
+                <input type="file" id="pdf-input" accept=".pdf" class="hidden" onchange="analyzePDF(this.files[0])">
+            </label>
+        </div>
+
+        <div id="loader" class="hidden mt-16">
+            <div class="animate-spin rounded-full h-16 w-16 border-[6px] border-green-600 border-t-transparent mx-auto"></div>
+            <p id="loader-text" class="mt-8 text-slate-500 font-bold animate-pulse text-lg">Analyzing Content...</p>
+        </div>
+    </div>
+
+    <div id="content-section" class="hidden max-w-[1400px] mx-auto mt-12 px-6 pb-32 flex gap-10 items-start">
+        <div id="sidebar-nav" class="w-72 flex-shrink-0 sticky top-32 space-y-4 no-print">
+            <div class="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-2">
+                <button onclick="switchTab('notes')" id="btn-notes" class="w-full text-left px-6 py-4 rounded-2xl bg-green-600 text-white font-bold transition-all shadow-lg shadow-green-100 flex items-center gap-3">📝 Notes</button>
+                <button onclick="switchTab('flashcards')" id="btn-flashcards" class="w-full text-left px-6 py-4 rounded-2xl bg-transparent text-slate-600 hover:bg-slate-50 font-bold transition-all flex items-center gap-3">🗂️ Flashcards</button>
+                <button onclick="switchTab('quiz')" id="btn-quiz" class="w-full text-left px-6 py-4 rounded-2xl bg-transparent text-slate-600 hover:bg-slate-50 font-bold transition-all flex items-center gap-3">❓ Quiz</button>
+                <button onclick="switchTab('podcast')" id="btn-podcast" class="w-full text-left px-6 py-4 rounded-2xl bg-transparent text-slate-600 hover:bg-slate-50 font-bold transition-all flex items-center gap-3">🎧 Interactive</button>
+            </div>
+            
+            <div class="bg-slate-800 rounded-3xl p-6 text-white shadow-xl shadow-slate-300 mt-6 relative overflow-hidden group cursor-pointer" onclick="document.getElementById('ai-tooltip').click()">
+                <h3 class="font-bold text-lg mb-1">AI Tutor</h3>
+                <p class="text-slate-400 text-sm">Highlight text to ask!</p>
+            </div>
+        </div>
+
+        <div class="flex-1 min-w-0">
+            <div id="tab-notes" class="bg-white rounded-[40px] shadow-sm border border-slate-100 p-16 min-h-[800px]">
+                <div class="bg-slate-50 p-10 rounded-[30px] mb-12 border border-slate-100">
+                    <h3 class="text-green-600 font-black text-xs uppercase mb-4 tracking-widest">Executive Summary</h3>
+                    <div id="summary-content" class="text-slate-700 text-lg leading-relaxed prose-p:my-0"></div>
+                </div>
+                <div id="notes-content" class="prose prose-slate prose-xl max-w-none"></div>
+            </div>
+            
+            <div id="tab-flashcards" class="hidden flex flex-wrap gap-8 justify-center"></div>
+            <div id="tab-quiz" class="hidden bg-white rounded-[40px] shadow-sm border border-slate-100 p-16 space-y-12"></div>
+
+            <div id="tab-podcast" class="hidden bg-white rounded-[40px] shadow-sm border border-slate-100 p-12 text-center">
+                <h2 class="text-3xl font-black mb-2">Interactive Lesson</h2>
+                <p class="text-slate-500 mb-8">The AI Narrator teaches you. Interrupt anytime to ask questions.</p>
+                <div class="bg-slate-100 p-10 rounded-[40px] mb-8 relative overflow-hidden">
+                    <div id="visualizer" class="flex justify-center items-end h-10 gap-1 mb-8 opacity-50"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+                    <div class="flex justify-center gap-4">
+                        <button onclick="togglePodcast()" id="podcast-btn" class="bg-green-600 text-white px-10 py-5 rounded-full font-bold text-xl hover:bg-green-700 transition shadow-xl shadow-green-200 flex items-center gap-3"><span>▶️</span> Start Lesson</button>
+                        <button onclick="startListening()" id="mic-btn" class="bg-white text-slate-700 border-2 border-slate-200 px-6 py-5 rounded-full font-bold text-xl hover:bg-slate-50 transition shadow-lg flex items-center gap-2"><span>🎙️</span> Interrupt</button>
+                    </div>
+                </div>
+                <div id="podcast-transcript" class="text-left prose prose-slate max-w-none bg-slate-50 p-8 rounded-3xl border border-slate-200 h-96 overflow-y-auto scroll-smooth"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="ai-tooltip" onclick="askHighlight()" class="no-print">✨ Ask AI</div>
+    <div id="chat-modal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center backdrop-blur-sm no-print">
+        <div class="bg-white rounded-3xl w-[600px] max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-6 border-b flex justify-between items-center bg-slate-50">
+                <h3 class="font-bold text-xl text-slate-800">Tutor Chat</h3>
+                <button onclick="document.getElementById('chat-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-800 text-3xl font-light">&times;</button>
+            </div>
+            <div id="chat-history" class="flex-1 p-8 overflow-y-auto space-y-6 bg-white flex flex-col"></div>
+            <div class="p-6 border-t bg-slate-50 flex gap-3">
+                <input type="text" id="chat-input" class="flex-1 border border-slate-200 rounded-xl px-5 py-4 focus:outline-none focus:border-green-500 transition text-lg" placeholder="Type your question...">
+                <button onclick="sendChat()" class="bg-green-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-green-700 transition">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        marked.use(markedKatex({ throwOnError: false }));
+        mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' });
+        
+        window.globalData = {}; 
+        window.currentSel = "";
+        window.isPlaying = false;
+        window.podcastIndex = 0;
+        const synth = window.speechSynthesis;
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        function getKey() { return localStorage.getItem('gemini_key'); }
+        function saveKey() {
+            const key = document.getElementById('api-key-input').value.trim();
+            if(!key) return alert("Please enter a key.");
+            localStorage.setItem('gemini_key', key);
+            document.getElementById('settings-modal').classList.add('hidden');
+            alert("Key Saved! You can now generate notes.");
+        }
+        function openSettings() {
+            document.getElementById('api-key-input').value = getKey() || "";
+            document.getElementById('settings-modal').classList.remove('hidden');
+        }
+
+        async function apiCall(endpoint, body) {
+            const key = getKey();
+            if(!key) { openSettings(); throw new Error("No API Key"); }
+            
+            const headers = {'x-gemini-api-key': key};
+            if(!(body instanceof FormData)) headers['Content-Type'] = 'application/json';
+            
+            const res = await fetch(endpoint, {
+                method: 'POST', 
+                headers: headers,
+                body: body instanceof FormData ? body : JSON.stringify(body)
+            });
+            return res;
+        }
+
+        function renderMath() {
+            renderMathInElement(document.body, {
+                delimiters: [{left: "$$", right: "$$", display: true}, {left: "$", right: "$", display: false}],
+                throwOnError: false
+            });
+        }
+
+        function getNarratorVoice() {
+            const voices = synth.getVoices();
+            return voices.find(v => v.name.includes("Google US English")) || 
+                   voices.find(v => v.name.includes("English United States")) || 
+                   voices[0];
+        }
+
+        function togglePodcast() {
+            if(window.isPlaying) {
+                synth.cancel();
+                window.isPlaying = false;
+                document.getElementById('podcast-btn').innerHTML = "<span>▶️</span> Resume";
+                document.getElementById('visualizer').classList.remove('animate-sound');
+            } else {
+                if(!window.globalData.podcast) return alert("No lesson script available.");
+                window.isPlaying = true;
+                document.getElementById('podcast-btn').innerHTML = "<span>⏸️</span> Pause";
+                document.getElementById('visualizer').classList.add('animate-sound');
+                speakNextChunk();
+            }
+        }
+
+        function speakNextChunk() {
+            if(!window.isPlaying) return;
+            const lines = window.globalData.podcast.split('\n').filter(l => l.trim() !== "");
+            if(window.podcastIndex >= lines.length) {
+                window.isPlaying = false;
+                document.getElementById('podcast-btn').innerHTML = "<span>↺</span> Replay";
+                document.getElementById('visualizer').classList.remove('animate-sound');
+                window.podcastIndex = 0;
+                return;
+            }
+
+            let text = lines[window.podcastIndex];
+            // Remove math chars for audio, keep text
+            const speakText = text.replace(/[\$\*\[\]\(\)\#\-\^\_\{\}]/g, "").trim();
+            
+            const utter = new SpeechSynthesisUtterance(speakText);
+            utter.rate = 1.0;
+            utter.voice = getNarratorVoice();
+
+            utter.onend = () => {
+                window.podcastIndex++;
+                speakNextChunk();
+            };
+
+            synth.speak(utter);
+
+            const p = document.createElement('p');
+            p.innerText = text; // Keep Visual Math here
+            p.className = "text-slate-700 mb-4 border-l-4 border-green-500 pl-4 bg-white p-3 rounded-r-xl shadow-sm";
+            const box = document.getElementById('podcast-transcript');
+            box.prepend(p);
+            
+            // Render Math in the new podcast block
+            renderMathInElement(p, {
+                delimiters: [{left: "$$", right: "$$", display: true}, {left: "$", right: "$", display: false}]
+            });
+        }
+
+        function startListening() {
+            if(!SpeechRecognition) return alert("Browser does not support Voice Input. Use Chrome.");
+            
+            synth.cancel();
+            window.isPlaying = false;
+            document.getElementById('podcast-btn').innerHTML = "<span>▶️</span> Resume";
+            document.getElementById('visualizer').classList.remove('animate-sound');
+
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'en-US';
+            document.getElementById('mic-btn').classList.add('bg-red-50', 'text-red-600', 'border-red-200');
+            document.getElementById('mic-btn').innerText = "🔴 Listening...";
+
+            recognition.onresult = async (event) => {
+                const question = event.results[0][0].transcript;
+                document.getElementById('mic-btn').className = "bg-white text-slate-700 border-2 border-slate-200 px-6 py-5 rounded-full font-bold text-xl hover:bg-slate-50 transition shadow-lg flex items-center gap-2";
+                document.getElementById('mic-btn').innerHTML = "<span>🎙️</span> Interrupt";
+
+                const userP = document.createElement('p');
+                userP.innerText = "You: " + question;
+                userP.className = "text-right text-green-700 font-bold mb-4 bg-green-50 p-3 rounded-xl";
+                document.getElementById('podcast-transcript').prepend(userP);
+
+                const res = await apiCall('/api/chat', {context: "Podcast Interruption", question: question, full_content: window.globalData.notes});
+                const data = await res.json();
+                
+                const answerText = data.answer.replace(/[\$\*\[\]\(\)\#\-\^\_\{\}]/g, "");
+                const utter = new SpeechSynthesisUtterance(answerText);
+                utter.voice = getNarratorVoice();
+                
+                utter.onend = () => {
+                    window.isPlaying = true;
+                    document.getElementById('podcast-btn').innerHTML = "<span>⏸️</span> Pause";
+                    document.getElementById('visualizer').classList.add('animate-sound');
+                    speakNextChunk();
+                };
+                synth.speak(utter);
+
+                const aiP = document.createElement('p');
+                aiP.innerText = "Tutor: " + data.answer;
+                aiP.className = "text-slate-700 mb-4 border-l-4 border-blue-500 pl-4 bg-blue-50 p-3 rounded-r-xl";
+                document.getElementById('podcast-transcript').prepend(aiP);
+                
+                renderMathInElement(aiP, {
+                    delimiters: [{left: "$$", right: "$$", display: true}, {left: "$", right: "$", display: false}]
+                });
+            };
+            
+            recognition.start();
+        }
+
+        // --- COMMON LOGIC ---
+        function handleDragOver(e) { e.preventDefault(); document.getElementById('pdf-input-box').classList.add('drag-over'); }
+        function handleDragLeave(e) { e.preventDefault(); document.getElementById('pdf-input-box').classList.remove('drag-over'); }
+        function handleDrop(e) {
+            e.preventDefault();
+            document.getElementById('pdf-input-box').classList.remove('drag-over');
+            if (e.dataTransfer.files.length > 0) analyzePDF(e.dataTransfer.files[0]);
+        }
+
+        function setMode(mode) {
+            document.getElementById('video-input-box').classList.toggle('hidden', mode !== 'video');
+            document.getElementById('pdf-input-box').classList.toggle('hidden', mode !== 'pdf');
+            const activeClass = "px-8 py-3 rounded-full font-bold bg-green-600 text-white shadow-lg shadow-green-200 transition-all";
+            const inactiveClass = "px-8 py-3 rounded-full font-bold bg-white text-slate-500 hover:bg-slate-100 transition-all";
+            document.getElementById('btn-mode-video').className = mode === 'video' ? activeClass : inactiveClass;
+            document.getElementById('btn-mode-pdf').className = mode === 'pdf' ? activeClass : inactiveClass;
+        }
+
+        function startLoading(msg) {
+            document.getElementById('input-section').classList.add('hidden');
+            document.getElementById('loader').classList.remove('hidden');
+            document.getElementById('loader-text').innerText = msg;
+        }
+        function stopLoading() {
+            document.getElementById('loader').classList.add('hidden');
+            document.getElementById('input-section').classList.remove('hidden');
+        }
+
+        async function analyzeVideo() {
+            const url = document.getElementById('url-input').value;
+            if(!url) return;
+            startLoading("Analyzing YouTube Video...");
+            try {
+                const res = await apiCall('/api/analyze_video', {url});
+                const data = await res.json();
+                processData(data);
+            } catch (e) { alert(e.message); stopLoading(); }
+        }
+
+        async function analyzePDF(file) {
+            if(!file) return; 
+            startLoading("Reading PDF & Creating Notes...");
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const res = await apiCall('/api/analyze_pdf', formData);
+                const data = await res.json();
+                processData(data);
+            } catch (e) { alert(e.message); stopLoading(); }
+        }
+
+        function processData(data) {
+            if(data.error) throw new Error(data.error);
+            window.globalData = data;
+            window.podcastIndex = 0;
+            stopLoading();
+            document.getElementById('input-section').classList.add('hidden');
+            document.getElementById('content-section').classList.remove('hidden');
+            document.getElementById('btn-export').classList.remove('hidden');
+
+            document.getElementById('summary-content').innerHTML = marked.parse(data.summary);
+            const notesContainer = document.getElementById('notes-content');
+            notesContainer.innerHTML = marked.parse(data.notes);
+            
+            const mermaidBlocks = notesContainer.querySelectorAll('.language-mermaid');
+            for (let i = 0; i < mermaidBlocks.length; i++) {
+                const div = document.createElement('div');
+                div.className = 'mermaid';
+                div.id = `mermaid-${i}`;
+                div.textContent = mermaidBlocks[i].textContent;
+                mermaidBlocks[i].parentElement.replaceWith(div);
+            }
+            try { mermaid.run(); } catch(e) {}
+
+            const fcContainer = document.getElementById('tab-flashcards');
+            fcContainer.innerHTML = '';
+            (data.flashcards || []).forEach(fc => {
+                const card = document.createElement('div');
+                card.className = 'flip-card';
+                card.innerHTML = `<div class="flip-card-inner"><div class="flip-card-front"><div class="prose prose-lg text-center font-bold">${marked.parse(fc.front)}</div></div><div class="flip-card-back"><div class="prose prose-lg text-center text-white">${marked.parse(fc.back)}</div></div></div>`;
+                card.onclick = () => card.classList.toggle('flipped');
+                fcContainer.appendChild(card);
+            });
+
+            const qContainer = document.getElementById('tab-quiz');
+            qContainer.innerHTML = '<h2 class="text-3xl font-black mb-10">Knowledge Check</h2>';
+            (data.quiz || []).forEach((q, idx) => {
+                const qDiv = document.createElement('div');
+                qDiv.innerHTML = `<div class="font-bold text-2xl mb-6 prose">${marked.parse((idx+1) + ". " + q.question)}</div><div class="grid gap-4">${q.options.map(opt => `<button onclick="this.classList.add('${opt.includes(q.answer) ? 'bg-green-100' : 'bg-red-100'}')" class="border-2 border-slate-100 p-6 rounded-2xl text-left hover:bg-slate-50 transition-all text-lg font-medium">${marked.parse(opt)}</button>`).join('')}</div>`;
+                qContainer.appendChild(qDiv);
+            });
+
+            renderMath();
+        }
+
+        function switchTab(tab) {
+            ['notes', 'flashcards', 'quiz', 'podcast'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.add('hidden');
+                document.getElementById(`btn-${t}`).className = "w-full text-left px-6 py-4 rounded-2xl bg-transparent text-slate-600 hover:bg-slate-50 font-bold transition-all flex items-center gap-3";
+            });
+            document.getElementById(`tab-${tab}`).classList.remove('hidden');
+            document.getElementById(`btn-${tab}`).className = "w-full text-left px-6 py-4 rounded-2xl bg-green-600 text-white font-bold transition-all shadow-lg shadow-green-100 flex items-center gap-3";
+        }
+
+        document.addEventListener('mouseup', () => {
+            const sel = window.getSelection();
+            const tooltip = document.getElementById('ai-tooltip');
+            if (sel.toString().length > 5 && document.getElementById('tab-notes').contains(sel.anchorNode)) {
+                const rect = sel.getRangeAt(0).getBoundingClientRect();
+                tooltip.style.display = 'block';
+                tooltip.style.top = `${rect.top + window.scrollY - 60}px`;
+                tooltip.style.left = `${rect.left + rect.width/2}px`;
+                window.currentSel = sel.toString();
+            } else { tooltip.style.display = 'none'; }
+        });
+
+        async function askHighlight() {
+            document.getElementById('ai-tooltip').style.display = 'none';
+            document.getElementById('chat-modal').classList.remove('hidden');
+            if(window.currentSel) {
+                document.getElementById('chat-input').value = `Explain: "${window.currentSel}"`;
+                sendChat();
+            }
+        }
+
+        async function sendChat() {
+            const input = document.getElementById('chat-input');
+            const history = document.getElementById('chat-history');
+            const question = input.value;
+            if(!question) return;
+
+            if(history.children[0] && history.children[0].classList.contains('text-center')) history.innerHTML = '';
+            
+            history.innerHTML += `<div class="self-end max-w-[80%]"><div class="bg-green-600 text-white px-6 py-4 rounded-3xl rounded-tr-none inline-block font-medium text-lg">${question}</div></div>`;
+            input.value = "";
+            history.scrollTop = history.scrollHeight;
+
+            const res = await apiCall('/api/chat', {
+                context: window.currentSel || "", 
+                question: question, 
+                full_content: window.globalData.notes || ""
+            });
+            const data = await res.json();
+            
+            history.innerHTML += `<div class="self-start max-w-[80%]"><div class="bg-slate-100 text-slate-800 px-6 py-4 rounded-3xl rounded-tl-none inline-block prose prose-lg">${marked.parse(data.answer)}</div></div>`;
+            history.scrollTop = history.scrollHeight;
+            window.currentSel = "";
+            renderMath();
+        }
+    </script>
+</body>
+</html>
