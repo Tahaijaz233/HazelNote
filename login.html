@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HazelNote — Sign In</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        * { font-family:'Inter',sans-serif; box-sizing:border-box; }
+        body { background:#0F172A; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px; }
+        .bg-orb { position:fixed; border-radius:50%; filter:blur(90px); opacity:.12; pointer-events:none; }
+        .card { background:rgba(30,41,59,.88); backdrop-filter:blur(24px); border:1px solid rgba(255,255,255,.07); border-radius:24px; width:100%; max-width:340px; padding:30px 26px; box-shadow:0 20px 60px rgba(0,0,0,.6); position:relative; z-index:10; }
+        .inp { width:100%; background:rgba(15,23,42,.7); border:1.5px solid rgba(255,255,255,.09); border-radius:11px; padding:10px 13px; color:#E2E8F0; font-size:.875rem; transition:all .2s; outline:none; }
+        .inp:focus { border-color:#10B981; box-shadow:0 0 0 3px rgba(16,185,129,.12); }
+        .inp::placeholder { color:#374151; }
+        .lbl { display:block; font-size:.7rem; font-weight:700; color:#64748B; letter-spacing:.07em; text-transform:uppercase; margin-bottom:5px; }
+        .btn { width:100%; padding:11px; background:linear-gradient(135deg,#10B981,#059669); color:#fff; font-weight:700; font-size:.875rem; border-radius:11px; border:none; cursor:pointer; transition:all .2s; box-shadow:0 4px 14px rgba(16,185,129,.25); display:flex; align-items:center; justify-content:center; gap:7px; }
+        .btn:hover { transform:translateY(-1px); box-shadow:0 6px 20px rgba(16,185,129,.35); }
+        .btn:disabled { opacity:.55; cursor:not-allowed; transform:none; }
+        .tab { flex:1; padding:7px; border-radius:7px; font-weight:600; font-size:.8rem; cursor:pointer; transition:all .2s; color:#64748B; background:transparent; border:none; }
+        .tab.on { background:rgba(16,185,129,.15); color:#10B981; }
+        .alert { padding:9px 13px; border-radius:9px; font-size:.8rem; font-weight:500; margin-bottom:13px; display:none; }
+        .alert.err { background:rgba(239,68,68,.13); color:#FCA5A5; border:1px solid rgba(239,68,68,.25); }
+        .alert.ok { background:rgba(16,185,129,.13); color:#6EE7B7; border:1px solid rgba(16,185,129,.25); }
+        .alert.show { display:block; }
+        .spin { width:14px; height:14px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:sp .7s linear infinite; display:inline-block; }
+        @keyframes sp { to{transform:rotate(360deg)} }
+        .lnk { background:none; border:none; color:#10B981; font-size:.75rem; font-weight:600; cursor:pointer; padding:0; }
+        .lnk:hover { color:#34D399; }
+        .gap { display:flex; flex-direction:column; gap:12px; }
+    </style>
+</head>
+<body>
+<div class="bg-orb w-80 h-80 bg-green-500" style="top:-8%;left:-8%"></div>
+<div class="bg-orb w-64 h-64 bg-blue-600" style="bottom:-5%;right:-5%"></div>
+
+<div class="card">
+    <div style="text-align:center;margin-bottom:20px">
+        <img src="Gemini_Generated_Image_soy6d1soy6d1soy6.png" alt="HazelNote" style="width:48px;height:48px;border-radius:14px;object-fit:cover;margin:0 auto 10px;box-shadow:0 4px 12px rgba(16,185,129,.3)">
+        <div style="font-size:1.15rem;font-weight:800;color:#F1F5F9;letter-spacing:-.02em">HazelNote</div>
+        <div style="font-size:.73rem;color:#475569;margin-top:2px">by free-ed · AI Study Workspace</div>
+    </div>
+
+    <div style="display:flex;background:rgba(15,23,42,.5);border-radius:9px;padding:3px;margin-bottom:18px;border:1px solid rgba(255,255,255,.05)">
+        <button class="tab on" id="tab-in" onclick="go('in')">Sign In</button>
+        <button class="tab" id="tab-up" onclick="go('up')">Sign Up</button>
+    </div>
+
+    <div class="alert" id="al"></div>
+
+    <!-- Sign In -->
+    <div id="f-in" class="gap">
+        <div>
+            <label class="lbl">Email</label>
+            <input type="email" id="in-email" class="inp" placeholder="you@example.com" autocomplete="email">
+        </div>
+        <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+                <label class="lbl" style="margin:0">Password</label>
+                <button class="lnk" onclick="goReset()">Forgot?</button>
+            </div>
+            <input type="password" id="in-pw" class="inp" placeholder="••••••••" autocomplete="current-password" onkeypress="if(event.key==='Enter')doIn()">
+        </div>
+        <button class="btn" onclick="doIn()" id="btn-in">Sign In</button>
+    </div>
+
+    <!-- Sign Up -->
+    <div id="f-up" class="gap hidden">
+        <div>
+            <label class="lbl">Full Name</label>
+            <input type="text" id="up-name" class="inp" placeholder="Alex Johnson" autocomplete="name">
+        </div>
+        <div>
+            <label class="lbl">Email</label>
+            <input type="email" id="up-email" class="inp" placeholder="you@example.com" autocomplete="email">
+        </div>
+        <div>
+            <label class="lbl">Password</label>
+            <input type="password" id="up-pw" class="inp" placeholder="At least 8 characters" autocomplete="new-password" onkeypress="if(event.key==='Enter')doUp()">
+        </div>
+        <button class="btn" onclick="doUp()" id="btn-up">Create Account</button>
+    </div>
+
+    <!-- Reset -->
+    <div id="f-reset" class="gap hidden">
+        <div style="background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);border-radius:9px;padding:9px 12px;font-size:.78rem;color:#93C5FD">Enter your email and we'll send a reset link.</div>
+        <div>
+            <label class="lbl">Email</label>
+            <input type="email" id="reset-email" class="inp" placeholder="you@example.com">
+        </div>
+        <button class="btn" onclick="doReset()">Send Reset Link</button>
+        <button class="lnk" style="text-align:center;padding:3px 0" onclick="go('in')">← Back to Sign In</button>
+    </div>
+
+    <div style="text-align:center;margin-top:14px">
+        <a href="index.html" style="color:#374151;font-size:.71rem;text-decoration:none">Continue without account →</a>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, updateProfile } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+    import { getFirestore, doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyASWr6KPOajE6gis-kWkCCTDNmq3GvEyV4",
+        authDomain: "hazelnoteai.firebaseapp.com",
+        projectId: "hazelnoteai",
+        storageBucket: "hazelnoteai.firebasestorage.app",
+        messagingSenderId: "892121963498",
+        appId: "1:892121963498:web:f73a471bfce70f663c3093"
+    };
+
+    let auth, db;
+    try {
+        const fbApp = initializeApp(firebaseConfig);
+        auth = getAuth(fbApp);
+        db = getFirestore(fbApp);
+    } catch(e) { console.warn('Firebase init failed:', e); }
+
+    function go(tab) {
+        document.getElementById('f-in').classList.toggle('hidden', tab!=='in');
+        document.getElementById('f-up').classList.toggle('hidden', tab!=='up');
+        document.getElementById('f-reset').classList.add('hidden');
+        document.getElementById('tab-in').classList.toggle('on', tab==='in');
+        document.getElementById('tab-up').classList.toggle('on', tab==='up');
+        hideAl();
+    }
+    window.go = go;
+
+    function goReset() {
+        document.getElementById('f-in').classList.add('hidden');
+        document.getElementById('f-reset').classList.remove('hidden');
+        document.getElementById('tab-in').classList.remove('on');
+        hideAl();
+    }
+    window.goReset = goReset;
+
+    function showAl(msg, type) {
+        const el = document.getElementById('al');
+        el.textContent = msg;
+        el.className = 'alert ' + (type==='ok' ? 'ok' : 'err') + ' show';
+    }
+    function hideAl() { document.getElementById('al').className = 'alert'; }
+
+    function setBtn(id, loading, txt) {
+        const b = document.getElementById(id);
+        b.disabled = loading;
+        b.innerHTML = loading ? `<span class="spin"></span>${txt}` : txt;
+    }
+
+    window.doIn = async function() {
+        if(!auth) { showAl('Firebase not configured.'); return; }
+        const email = document.getElementById('in-email').value.trim();
+        const pw = document.getElementById('in-pw').value;
+        if (!email || !pw) { showAl('Please fill in all fields.'); return; }
+        setBtn('btn-in', true, 'Signing in...');
+        try {
+            await signInWithEmailAndPassword(auth, email, pw);
+            showAl('Signed in! Redirecting...', 'ok');
+            setTimeout(() => window.location.href = 'index.html', 900);
+        } catch(e) {
+            const msg = (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password') ? 'Invalid email or password.' : e.message;
+            showAl(msg);
+            setBtn('btn-in', false, 'Sign In');
+        }
+    };
+
+    window.doUp = async function() {
+        if(!auth) { showAl('Firebase not configured.'); return; }
+        const name = document.getElementById('up-name').value.trim();
+        const email = document.getElementById('up-email').value.trim();
+        const pw = document.getElementById('up-pw').value;
+        if (!name || !email || !pw) { showAl('Please fill in all fields.'); return; }
+        if (pw.length < 8) { showAl('Password must be at least 8 characters.'); return; }
+        setBtn('btn-up', true, 'Creating...');
+        try {
+            const cred = await createUserWithEmailAndPassword(auth, email, pw);
+            await updateProfile(cred.user, { displayName: name });
+            await setDoc(doc(db, 'profiles', cred.user.uid), {
+                full_name: name,
+                email: email,
+                is_pro: false,
+                created_at: new Date().toISOString()
+            });
+            showAl('Account created! Redirecting...', 'ok');
+            setTimeout(() => window.location.href = 'index.html', 1200);
+        } catch(e) {
+            const msg = e.code === 'auth/email-already-in-use' ? 'Email already registered.' : e.message;
+            showAl(msg);
+            setBtn('btn-up', false, 'Create Account');
+        }
+    };
+
+    window.doReset = async function() {
+        if(!auth) { showAl('Firebase not configured.'); return; }
+        const email = document.getElementById('reset-email').value.trim();
+        if (!email) { showAl('Please enter your email.'); return; }
+        try {
+            await sendPasswordResetEmail(auth, email);
+            showAl('Reset link sent! Check your inbox.', 'ok');
+        } catch(e) { showAl(e.message || 'Reset failed.'); }
+    };
+
+    if (auth) {
+        onAuthStateChanged(auth, (user) => {
+            if (user) window.location.href = 'index.html';
+        });
+    }
+</script>
+</body>
+</html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HazelNote — Sign In</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        * { font-family:'Inter',sans-serif; box-sizing:border-box; }
+        body { background:#0F172A; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px; }
+        .bg-orb { position:fixed; border-radius:50%; filter:blur(90px); opacity:.12; pointer-events:none; }
+        .card { background:rgba(30,41,59,.88); backdrop-filter:blur(24px); border:1px solid rgba(255,255,255,.07); border-radius:24px; width:100%; max-width:340px; padding:30px 26px; box-shadow:0 20px 60px rgba(0,0,0,.6); position:relative; z-index:10; }
+        .inp { width:100%; background:rgba(15,23,42,.7); border:1.5px solid rgba(255,255,255,.09); border-radius:11px; padding:10px 13px; color:#E2E8F0; font-size:.875rem; transition:all .2s; outline:none; }
+        .inp:focus { border-color:#10B981; box-shadow:0 0 0 3px rgba(16,185,129,.12); }
+        .inp::placeholder { color:#374151; }
+        .lbl { display:block; font-size:.7rem; font-weight:700; color:#64748B; letter-spacing:.07em; text-transform:uppercase; margin-bottom:5px; }
+        .btn { width:100%; padding:11px; background:linear-gradient(135deg,#10B981,#059669); color:#fff; font-weight:700; font-size:.875rem; border-radius:11px; border:none; cursor:pointer; transition:all .2s; box-shadow:0 4px 14px rgba(16,185,129,.25); display:flex; align-items:center; justify-content:center; gap:7px; }
+        .btn:hover { transform:translateY(-1px); box-shadow:0 6px 20px rgba(16,185,129,.35); }
+        .btn:disabled { opacity:.55; cursor:not-allowed; transform:none; }
+        .tab { flex:1; padding:7px; border-radius:7px; font-weight:600; font-size:.8rem; cursor:pointer; transition:all .2s; color:#64748B; background:transparent; border:none; }
+        .tab.on { background:rgba(16,185,129,.15); color:#10B981; }
+        .alert { padding:9px 13px; border-radius:9px; font-size:.8rem; font-weight:500; margin-bottom:13px; display:none; }
+        .alert.err { background:rgba(239,68,68,.13); color:#FCA5A5; border:1px solid rgba(239,68,68,.25); }
+        .alert.ok { background:rgba(16,185,129,.13); color:#6EE7B7; border:1px solid rgba(16,185,129,.25); }
+        .alert.show { display:block; }
+        .spin { width:14px; height:14px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:sp .7s linear infinite; display:inline-block; }
+        @keyframes sp { to{transform:rotate(360deg)} }
+        .lnk { background:none; border:none; color:#10B981; font-size:.75rem; font-weight:600; cursor:pointer; padding:0; }
+        .lnk:hover { color:#34D399; }
+        .gap { display:flex; flex-direction:column; gap:12px; }
+    </style>
+</head>
+<body>
+<div class="bg-orb w-80 h-80 bg-green-500" style="top:-8%;left:-8%"></div>
+<div class="bg-orb w-64 h-64 bg-blue-600" style="bottom:-5%;right:-5%"></div>
+
+<div class="card">
+    <div style="text-align:center;margin-bottom:20px">
+        <div style="width:42px;height:42px;background:linear-gradient(135deg,#34D399,#059669);border-radius:12px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.2rem;font-weight:800;margin:0 auto 10px;box-shadow:0 4px 12px rgba(16,185,129,.3)">H</div>
+        <div style="font-size:1.15rem;font-weight:800;color:#F1F5F9;letter-spacing:-.02em">HazelNote</div>
+        <div style="font-size:.73rem;color:#475569;margin-top:2px">AI Study Workspace</div>
+    </div>
+
+    <div style="display:flex;background:rgba(15,23,42,.5);border-radius:9px;padding:3px;margin-bottom:18px;border:1px solid rgba(255,255,255,.05)">
+        <button class="tab on" id="tab-in" onclick="go('in')">Sign In</button>
+        <button class="tab" id="tab-up" onclick="go('up')">Sign Up</button>
+    </div>
+
+    <div class="alert" id="al"></div>
+
+    <!-- Sign In -->
+    <div id="f-in" class="gap">
+        <div>
+            <label class="lbl">Email</label>
+            <input type="email" id="in-email" class="inp" placeholder="you@example.com" autocomplete="email">
+        </div>
+        <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+                <label class="lbl" style="margin:0">Password</label>
+                <button class="lnk" onclick="goReset()">Forgot?</button>
+            </div>
+            <input type="password" id="in-pw" class="inp" placeholder="••••••••" autocomplete="current-password" onkeypress="if(event.key==='Enter')doIn()">
+        </div>
+        <button class="btn" onclick="doIn()" id="btn-in">Sign In</button>
+    </div>
+
+    <!-- Sign Up -->
+    <div id="f-up" class="gap hidden">
+        <div>
+            <label class="lbl">Full Name</label>
+            <input type="text" id="up-name" class="inp" placeholder="Alex Johnson" autocomplete="name">
+        </div>
+        <div>
+            <label class="lbl">Email</label>
+            <input type="email" id="up-email" class="inp" placeholder="you@example.com" autocomplete="email">
+        </div>
+        <div>
+            <label class="lbl">Password</label>
+            <input type="password" id="up-pw" class="inp" placeholder="At least 8 characters" autocomplete="new-password" onkeypress="if(event.key==='Enter')doUp()">
+        </div>
+        <button class="btn" onclick="doUp()" id="btn-up">Create Account</button>
+    </div>
+
+    <!-- Reset -->
+    <div id="f-reset" class="gap hidden">
+        <div style="background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);border-radius:9px;padding:9px 12px;font-size:.78rem;color:#93C5FD">Enter your email and we'll send a reset link.</div>
+        <div>
+            <label class="lbl">Email</label>
+            <input type="email" id="reset-email" class="inp" placeholder="you@example.com">
+        </div>
+        <button class="btn" onclick="doReset()">Send Reset Link</button>
+        <button class="lnk" style="text-align:center;padding:3px 0" onclick="go('in')">← Back to Sign In</button>
+    </div>
+
+    <div style="text-align:center;margin-top:14px">
+        <a href="index.html" style="color:#374151;font-size:.71rem;text-decoration:none">Continue without account →</a>
+    </div>
+</div>
+
+<script>
+    // ── SUPABASE CONFIG ─────────────────────────────
+    // Replace with your real values from supabase.com
+    const SB_URL = 'https://gtnnsbthzanuvqvydrmv.supabase.co';
+    const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd0bm5zYnRoemFudXZxdnlkcm12Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwMTE0NTMsImV4cCI6MjA4NzU4NzQ1M30.KFX0mcV5f7R95F_gzJaF7nIu2nesOAVafUhrSVHzdXE';
+    // ────────────────────────────────────────────────
+
+    let sb = null;
+    function getSB() {
+        if (SB_URL === 'YOUR_SUPABASE_URL') { alert('Supabase not configured. See SUPABASE_GUIDE.md.'); return null; }
+        if (!sb) sb = window.supabase.createClient(SB_URL, SB_KEY);
+        return sb;
+    }
+
+    function go(tab) {
+        document.getElementById('f-in').classList.toggle('hidden', tab!=='in');
+        document.getElementById('f-up').classList.toggle('hidden', tab!=='up');
+        document.getElementById('f-reset').classList.add('hidden');
+        document.getElementById('tab-in').classList.toggle('on', tab==='in');
+        document.getElementById('tab-up').classList.toggle('on', tab==='up');
+        hideAl();
+    }
+    function goReset() {
+        document.getElementById('f-in').classList.add('hidden');
+        document.getElementById('f-reset').classList.remove('hidden');
+        document.getElementById('tab-in').classList.remove('on');
+        hideAl();
+    }
+
+    function showAl(msg, type) {
+        const el = document.getElementById('al');
+        el.textContent = msg;
+        el.className = 'alert ' + (type==='ok'?'ok':'err') + ' show';
+    }
+    function hideAl() { document.getElementById('al').className='alert'; }
+
+    function setBtn(id, loading, txt) {
+        const b = document.getElementById(id);
+        b.disabled = loading;
+        b.innerHTML = loading ? `<span class="spin"></span>${txt}` : txt;
+    }
+
+    async function doIn() {
+        const s = getSB(); if(!s) return;
+        const email = document.getElementById('in-email').value.trim();
+        const pw = document.getElementById('in-pw').value;
+        if (!email||!pw) { showAl('Please fill in all fields.'); return; }
+        setBtn('btn-in', true, 'Signing in...');
+        try {
+            const { error } = await s.auth.signInWithPassword({ email, password: pw });
+            if (error) throw error;
+            showAl('Signed in! Redirecting...', 'ok');
+            setTimeout(() => window.location.href = 'index.html', 900);
+        } catch(e) {
+            showAl(e.message || 'Sign in failed.');
+            setBtn('btn-in', false, 'Sign In');
+        }
+    }
+
+    async function doUp() {
+        const s = getSB(); if(!s) return;
+        const name = document.getElementById('up-name').value.trim();
+        const email = document.getElementById('up-email').value.trim();
+        const pw = document.getElementById('up-pw').value;
+        if (!name||!email||!pw) { showAl('Please fill in all fields.'); return; }
+        if (pw.length < 8) { showAl('Password must be at least 8 characters.'); return; }
+        setBtn('btn-up', true, 'Creating...');
+        try {
+            const { error } = await s.auth.signUp({ email, password: pw, options: { data: { full_name: name } } });
+            if (error) throw error;
+            showAl('Account created! Check your email to confirm.', 'ok');
+            setBtn('btn-up', false, 'Create Account');
+        } catch(e) {
+            showAl(e.message || 'Sign up failed.');
+            setBtn('btn-up', false, 'Create Account');
+        }
+    }
+
+    async function doReset() {
+        const s = getSB(); if(!s) return;
+        const email = document.getElementById('reset-email').value.trim();
+        if (!email) { showAl('Please enter your email.'); return; }
+        try {
+            const { error } = await s.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin+'/index.html' });
+            if (error) throw error;
+            showAl('Reset link sent! Check your inbox.', 'ok');
+        } catch(e) { showAl(e.message||'Reset failed.'); }
+    }
+
+    // Auto-redirect if already logged in
+    if (SB_URL !== 'YOUR_SUPABASE_URL') {
+        sb = window.supabase.createClient(SB_URL, SB_KEY);
+        sb.auth.getSession().then(({ data: { session } }) => {
+            if (session) window.location.href = 'index.html';
+        });
+    }
+</script>
+</body>
+</html>
